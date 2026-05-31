@@ -9,6 +9,14 @@
 
 ---
 
+## Screenshots
+
+![Dashboard — vista general](img/dashboard1.png)
+
+![Dashboard — tabla de programas](img/dashboard2.png)
+
+---
+
 ## Configuración
 
 1. Abre el vault en Obsidian (`Archivo → Abrir vault → selecciona esta carpeta`).
