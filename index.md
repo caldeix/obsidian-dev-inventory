@@ -310,6 +310,240 @@ async function saveProgram(data) {
 }
 
 // ══════════════════════════════════════════════════════
+//  MODAL: Editar programa
+// ══════════════════════════════════════════════════════
+async function openEditProgramModal(row) {
+  var obsidian = require('obsidian');
+  var Modal   = obsidian.Modal;
+  var Setting = obsidian.Setting;
+  var Notice  = obsidian.Notice;
+
+  var file = app.vault.getAbstractFileByPath(row.file.path);
+  if (!file) { new Notice('No se encontró el fichero'); return; }
+
+  var cache = app.metadataCache.getFileCache(file);
+  var fm    = (cache && cache.frontmatter) ? cache.frontmatter : {};
+  var envs  = fm.environments || {};
+
+  var pagesNow      = dv.pages().where(function(p) { return p.name && p.project; });
+  var existProjects = Array.from(new Set(pagesNow.map(function(p) { return p.project; }).filter(Boolean))).sort();
+  var existLangs    = Array.from(new Set(pagesNow.array().flatMap(function(p) { return normArray(p.languages); }))).filter(Boolean).sort();
+  var existDbs      = Array.from(new Set(pagesNow.array().flatMap(function(p) { return normArray(p.databases); }))).filter(Boolean).sort();
+  var existOwners   = Array.from(new Set(pagesNow.map(function(p) { return p.owner; }).filter(Boolean))).sort();
+  var existNames    = pagesNow.map(function(p) { return p.name; }).filter(Boolean).sort();
+
+  function fmArr(val) {
+    if (!val) return '';
+    if (Array.isArray(val)) return val.join(', ');
+    return String(val);
+  }
+
+  var data = {
+    name:         fm.name         || row.name,
+    project:      fm.project      || row.project,
+    app_type:     fm.app_type     || row.app_type || 'api',
+    languages:    fmArr(fm.languages),
+    databases:    fmArr(fm.databases),
+    owner:        fm.owner        || '',
+    criticality:  fm.criticality  || 'medium',
+    env_dev:      envs.dev        ? String(envs.dev) : '',
+    env_pre:      envs.pre        ? String(envs.pre) : '',
+    env_pro:      envs.pro        ? String(envs.pro) : '',
+    dependencies: fmArr(fm.dependencies),
+    repo_url:     fm.repo_url     || '',
+    version:      fm.version      ? String(fm.version) : '',
+    last_updated: fm.last_updated ? String(fm.last_updated).slice(0,10) : '',
+    deprecated:   !!fm.deprecated,
+    cicd:         fm.cicd === true,
+    description:  fm.description  || '',
+    created:      fm.created      ? String(fm.created).slice(0,10) : ''
+  };
+
+  var EditProgramModal = class extends Modal {
+    onOpen() {
+      var self = this;
+      var contentEl = this.contentEl;
+      contentEl.empty();
+      contentEl.addClass('di-modal');
+      contentEl.createEl('h2', { text: '✏️ Editar: ' + data.name });
+
+      function mkDatalist(id, values) {
+        var dl = contentEl.createEl('datalist', { attr: { id: 'edit-' + id } });
+        values.forEach(function(v) { dl.createEl('option', { attr: { value: v } }); });
+      }
+      mkDatalist('dl-proj',   existProjects);
+      mkDatalist('dl-langs',  existLangs);
+      mkDatalist('dl-dbs',    existDbs);
+      mkDatalist('dl-owners', existOwners);
+      mkDatalist('dl-deps',   existNames);
+
+      new Setting(contentEl).setName('Nombre del programa')
+        .addText(function(t) { t.setValue(data.name); t.onChange(function(v) { data.name = v.trim(); }); });
+
+      new Setting(contentEl).setName('Proyecto')
+        .addText(function(t) {
+          t.setValue(data.project);
+          t.inputEl.setAttribute('list', 'edit-dl-proj');
+          t.onChange(function(v) { data.project = v.trim(); });
+        });
+
+      new Setting(contentEl).setName('Tipo de aplicación')
+        .addDropdown(function(d) {
+          ['api','webapp','batch','library','cli'].forEach(function(o) { d.addOption(o, o); });
+          d.setValue(data.app_type);
+          d.onChange(function(v) { data.app_type = v; });
+        });
+
+      new Setting(contentEl).setName('Lenguajes')
+        .addText(function(t) {
+          t.setValue(data.languages);
+          t.inputEl.setAttribute('list', 'edit-dl-langs');
+          t.onChange(function(v) { data.languages = v; });
+        });
+
+      new Setting(contentEl).setName('Bases de datos')
+        .addText(function(t) {
+          t.setValue(data.databases);
+          t.inputEl.setAttribute('list', 'edit-dl-dbs');
+          t.onChange(function(v) { data.databases = v; });
+        });
+
+      new Setting(contentEl).setName('Owner / Responsable')
+        .addText(function(t) {
+          t.setValue(data.owner);
+          t.inputEl.setAttribute('list', 'edit-dl-owners');
+          t.onChange(function(v) { data.owner = v.trim(); });
+        });
+
+      new Setting(contentEl).setName('Criticidad')
+        .addDropdown(function(d) {
+          ['critical','high','medium','low'].forEach(function(o) { d.addOption(o, o); });
+          d.setValue(data.criticality);
+          d.onChange(function(v) { data.criticality = v; });
+        });
+
+      var envWrap = contentEl.createEl('div');
+      envWrap.style.cssText = 'margin:8px 0 16px;padding:12px 0;border-top:1px solid var(--background-modifier-border);';
+      envWrap.createEl('div', { text: 'Entornos (DEV / PRE / PRO)' }).style.cssText = 'font-size:.88rem;font-weight:600;color:var(--text-normal);margin-bottom:8px;';
+      var envRow = envWrap.createEl('div');
+      envRow.style.cssText = 'display:flex;gap:10px;';
+      var envVals = { DEV: data.env_dev, PRE: data.env_pre, PRO: data.env_pro };
+      ['DEV','PRE','PRO'].forEach(function(env) {
+        var col = envRow.createEl('div');
+        col.style.flex = '1';
+        col.createEl('div', { text: env }).style.cssText = 'font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px;';
+        var inp = col.createEl('input');
+        inp.type = 'text'; inp.placeholder = 'ip / dns';
+        inp.value = envVals[env] || '';
+        inp.style.cssText = 'width:100%;padding:5px 8px;border:1px solid var(--background-modifier-border);border-radius:4px;background:var(--background-primary);color:var(--text-normal);font-size:.82rem;font-family:inherit;box-sizing:border-box;';
+        inp.addEventListener('input', (function(e) {
+          return function() { data['env_' + e.toLowerCase()] = inp.value.trim(); };
+        })(env));
+      });
+
+      new Setting(contentEl).setName('Dependencias')
+        .addText(function(t) {
+          t.setValue(data.dependencies);
+          t.inputEl.setAttribute('list', 'edit-dl-deps');
+          t.onChange(function(v) { data.dependencies = v; });
+        });
+
+      new Setting(contentEl).setName('URL Repositorio')
+        .addText(function(t) { t.setValue(data.repo_url); t.onChange(function(v) { data.repo_url = v.trim(); }); });
+
+      new Setting(contentEl).setName('Versión')
+        .addText(function(t) { t.setValue(data.version); t.onChange(function(v) { data.version = v.trim(); }); });
+
+      new Setting(contentEl).setName('Última actualización')
+        .addText(function(t) {
+          t.inputEl.type = 'date';
+          t.setValue(data.last_updated);
+          t.onChange(function(v) { data.last_updated = v; });
+        });
+
+      new Setting(contentEl).setName('Deprecated')
+        .addToggle(function(t) { t.setValue(data.deprecated); t.onChange(function(v) { data.deprecated = v; }); });
+
+      new Setting(contentEl).setName('CI/CD activo')
+        .addToggle(function(t) { t.setValue(data.cicd); t.onChange(function(v) { data.cicd = v; }); });
+
+      new Setting(contentEl).setName('Descripción')
+        .addTextArea(function(t) {
+          t.setValue(data.description);
+          t.onChange(function(v) { data.description = v; });
+          t.inputEl.style.minHeight = '80px';
+          t.inputEl.style.width = '100%';
+        });
+
+      new Setting(contentEl)
+        .addButton(function(b) {
+          b.setButtonText('Actualizar').setCta().onClick(async function() {
+            if (!data.name)    { new Notice('El nombre es obligatorio'); return; }
+            if (!data.project) { new Notice('El proyecto es obligatorio'); return; }
+            await updateProgram(data, file);
+            self.close();
+          });
+        })
+        .addButton(function(b) {
+          b.setButtonText('Cancelar').onClick(function() { self.close(); });
+        });
+    }
+    onClose() { this.contentEl.empty(); }
+  };
+
+  new EditProgramModal(app).open();
+}
+
+// ── Actualizar programa existente ──────────────────────
+async function updateProgram(data, file) {
+  var Notice = require('obsidian').Notice;
+
+  function toYamlArray(str) {
+    if (!str || !str.trim()) return '[]';
+    var parts = str.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+    return parts.length ? '[' + parts.join(', ') + ']' : '[]';
+  }
+
+  var envLines = [];
+  if (data.env_dev) envLines.push('  dev: ' + data.env_dev);
+  if (data.env_pre) envLines.push('  pre: ' + data.env_pre);
+  if (data.env_pro) envLines.push('  pro: ' + data.env_pro);
+  var envBlock = envLines.length ? envLines.join('\n') : '  pro: ""';
+
+  var newFm = [
+    '---',
+    'name: ' + data.name,
+    'project: ' + data.project,
+    'app_type: ' + data.app_type,
+    'languages: ' + toYamlArray(data.languages),
+    'databases: ' + toYamlArray(data.databases),
+    'owner: ' + (data.owner || ''),
+    'criticality: ' + data.criticality,
+    'environments:',
+    envBlock,
+    'dependencies: ' + toYamlArray(data.dependencies),
+    'last_updated: ' + (data.last_updated || ''),
+    'deprecated: ' + data.deprecated,
+    'cicd: ' + data.cicd,
+    'repo_url: ' + (data.repo_url || ''),
+    (data.version  ? 'version: '  + data.version  : null),
+    'description: ' + (data.description || '').replace(/\n/g, ' '),
+    (data.created  ? 'created: '  + data.created  : null),
+    '---'
+  ].filter(function(l) { return l !== null; }).join('\n');
+
+  try {
+    var raw = await app.vault.read(file);
+    var closeIdx = raw.indexOf('\n---', 4);
+    var body = closeIdx !== -1 ? raw.slice(closeIdx + 4) : '';
+    await app.vault.modify(file, newFm + '\n' + body);
+    showBanner('✓ Actualizado: ' + data.name, 'success');
+  } catch(e) {
+    new Notice('Error al actualizar: ' + e.message);
+  }
+}
+
+// ══════════════════════════════════════════════════════
 //  CÁLCULO DE KPIs
 // ══════════════════════════════════════════════════════
 var totalActive   = active.length;
@@ -598,15 +832,29 @@ function render() {
   data.forEach(function(row) {
     var tr = tbody.insertRow();
 
-    // Nombre → link interno
+    // Nombre → botón editar + link interno
     var tdName = tr.insertCell();
+
+    var btnEdit = document.createElement('button');
+    btnEdit.className = 'di-edit-btn';
+    btnEdit.title = 'Editar programa';
+    btnEdit.textContent = '✏️';
+    btnEdit.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openEditProgramModal(row);
+    });
+    tdName.appendChild(btnEdit);
+
     var a = document.createElement('a');
     a.className = 'di-link';
     a.textContent = row.name;
     a.href = '#';
     a.addEventListener('click', function(e) {
       e.preventDefault();
-      app.workspace.openLinkText(row.file ? row.file.basename : row.name, row.file ? row.file.path : '', false);
+      if (row.file) {
+        var f = app.vault.getAbstractFileByPath(row.file.path);
+        if (f) app.workspace.getLeaf(false).openFile(f);
+      }
     });
     tdName.appendChild(a);
 

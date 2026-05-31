@@ -20,6 +20,8 @@ description: API REST de procesamiento de pagos y transacciones en tiempo real.
 created: 2024-03-01
 ---
 
+
+
 # api-pagos
 
 API REST principal de procesamiento de pagos. Expone endpoints para autorización, captura y reversión de transacciones. Integrada con pasarela de pago externa vía webhooks.

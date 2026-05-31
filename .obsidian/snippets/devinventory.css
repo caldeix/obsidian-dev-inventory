@@ -316,6 +316,21 @@
 .di-ext-link { color: var(--link-color, var(--interactive-accent)); text-decoration: none; }
 .di-ext-link:hover { text-decoration: underline; }
 
+/* ── Edit row button ── */
+.di-edit-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 5px 0 0;
+  font-size: 0.78rem;
+  opacity: 0.25;
+  transition: opacity .15s;
+  vertical-align: middle;
+  line-height: 1;
+}
+.di-table tr:hover .di-edit-btn { opacity: 0.7; }
+.di-edit-btn:hover { opacity: 1 !important; }
+
 /* ── New program button ── */
 .di-btn-new {
   display: inline-flex;
